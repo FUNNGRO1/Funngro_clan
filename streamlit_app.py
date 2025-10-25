@@ -182,13 +182,17 @@ if uploaded is not None:
             st.error("No messages found in the uploaded file. Make sure you uploaded a valid WhatsApp export (.txt).")
         else:
             # Normalize columns
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
-            df['message'] = df['message'].astype(str)
-            df['sender'] = df['sender'].astype(str)
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+df['message'] = df['message'].astype(str)
+df['sender'] = df['sender'].astype(str)
 
-            # Basic stats
-            total_messages = len(df)
-            unique_members = df['sender'].nunique()
+# ------------------- Filter last 30 days -------------------
+last_30_days = datetime.now() - pd.Timedelta(days=30)
+df = df[df['timestamp'] >= last_30_days].reset_index(drop=True)
+
+# Basic stats based on last 30 days
+total_messages = len(df)
+unique_members = df['sender'].nunique()
 
             # Member counts
             members = compute_member_counts(df)
