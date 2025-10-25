@@ -1,3 +1,4 @@
+
 # streamlit_app.py
 import re
 import io
@@ -38,8 +39,6 @@ def parse_whatsapp_txt(raw_text):
     Parse WhatsApp exported .txt into a DataFrame with columns: timestamp, sender, message
     Compatible with common WhatsApp export formats. Handles multiline messages.
     """
-    # Common WhatsApp line patterns (many variants exist)
-    # Try day-first parsing by default.
     line_re = re.compile(
         r'^(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[APMapm\.]{2,5})?)\s*-\s*([^:]+?):\s*(.*)$'
     )
@@ -53,7 +52,6 @@ def parse_whatsapp_txt(raw_text):
         if m:
             datepart, timepart, sender, msg = m.groups()
             timestr = f"{datepart} {timepart}"
-            # Try parsing; prefer dayfirst
             try:
                 ts = dtparser.parse(timestr, dayfirst=True, fuzzy=True)
             except Exception:
@@ -64,14 +62,9 @@ def parse_whatsapp_txt(raw_text):
             rows.append({"timestamp": ts, "sender": sender.strip(), "message": msg.strip()})
             last = rows[-1]
         else:
-            # continuation line -> append to last message
             if last is not None:
                 last["message"] = last["message"] + " " + line
-            else:
-                # orphan line — skip
-                pass
     df = pd.DataFrame(rows)
-    # Remove rows without timestamp
     df = df.dropna(subset=["timestamp"]).reset_index(drop=True)
     return df
 
@@ -86,7 +79,6 @@ def sentiment_analysis(df):
     df['sentiment_cat'] = df['sentiment_score'].apply(lambda s: 'positive' if s>0.05 else ('negative' if s<-0.05 else 'neutral'))
     return df
 
-# simple keyword sector mapping (tuneable)
 SECTORS = {
     "design": ["design","logo","poster","canva","figma","photoshop","banner"],
     "projects": ["project","deadline","task","submit","progress","work","report"],
@@ -105,29 +97,22 @@ def detect_sector(text):
     return "other"
 
 def activity_score(df):
-    # weekly metrics -> produce a simple activity score [0,1]
     if df.empty: return 0.0
     by_day = df.set_index('timestamp').resample('D').agg({'message':'count','sender':lambda s: s.nunique()})
     by_day.columns = ['msg_count','active_members']
     if by_day['msg_count'].max() == 0:
         return 0.0
-    # Normalize and weight
     score = (by_day['msg_count'].mean()/by_day['msg_count'].max())*0.6 + (by_day['active_members'].mean()/(by_day['active_members'].max()+1))*0.4
     return float(score)
 
 def generate_weekly_poster(summary, filename):
-    """
-    Simple PNG poster generator using Pillow. summary: dict with keys
-    """
     W, H = 1200, 675
-    bg = (11,15,26)  # near-black
+    bg = (11,15,26)
     neon_green = (57,255,20)
     neon_cyan = (0,229,255)
     neon_pink = (255,59,129)
     im = Image.new("RGB", (W, H), color=bg)
     draw = ImageDraw.Draw(im)
-
-    # Load a default font included in many environments - fallback
     try:
         font_title = ImageFont.truetype("DejaVuSans-Bold.ttf", 48)
         font_sub = ImageFont.truetype("DejaVuSans.ttf", 28)
@@ -136,31 +121,22 @@ def generate_weekly_poster(summary, filename):
         font_title = ImageFont.load_default()
         font_sub = ImageFont.load_default()
         font_small = ImageFont.load_default()
-
-    # Title
     draw.text((40,30), f"{summary.get('clan_name','Funngro Clan')}", font=font_title, fill=neon_cyan)
     draw.text((40,90), f"Weekly Summary", font=font_sub, fill=neon_green)
-
-    # Stats box
     x0 = 40; y0 = 150
     draw.rectangle([x0,y0, W-40, y0+200], outline=neon_pink, width=3)
     draw.text((x0+20, y0+20), f"Total messages: {summary.get('total_messages',0)}", font=font_sub, fill="white")
     draw.text((x0+20, y0+60), f"Unique members: {summary.get('unique_members',0)}", font=font_sub, fill="white")
     draw.text((x0+20, y0+100), f"Avg sentiment: {summary.get('avg_sentiment',0):.3f}", font=font_sub, fill="white")
     draw.text((x0+20, y0+140), f"Activity score: {summary.get('activity_score',0):.2f}", font=font_sub, fill="white")
-
-    # Top contributors
     tc_x = 700; tc_y = 160
     draw.text((tc_x, tc_y-30), "Top Contributors", font=font_sub, fill=neon_green)
     top = summary.get('top_contributors',[])
     for i, (name, cnt) in enumerate(top[:5]):
         draw.text((tc_x, tc_y + i*30), f"{i+1}. {name} — {cnt} msgs", font=font_small, fill="white")
-
-    # Footer suggestion
     suggestion = summary.get('suggestion','Keep the group active — try a 30-min sprint tomorrow!')
     draw.text((40, 380), "AI Suggestion:", font=font_sub, fill=neon_pink)
     draw.text((40, 420), suggestion, font=font_small, fill="white")
-
     im.save(filename)
     return filename
 
@@ -182,17 +158,17 @@ if uploaded is not None:
             st.error("No messages found in the uploaded file. Make sure you uploaded a valid WhatsApp export (.txt).")
         else:
             # Normalize columns
-df['timestamp'] = pd.to_datetime(df['timestamp'])
-df['message'] = df['message'].astype(str)
-df['sender'] = df['sender'].astype(str)
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df['message'] = df['message'].astype(str)
+            df['sender'] = df['sender'].astype(str)
 
-# ------------------- Filter last 30 days -------------------
-last_30_days = datetime.now() - pd.Timedelta(days=30)
-df = df[df['timestamp'] >= last_30_days].reset_index(drop=True)
+            # ------------------- Filter last 30 days -------------------
+            last_30_days = datetime.now() - pd.Timedelta(days=30)
+            df = df[df['timestamp'] >= last_30_days].reset_index(drop=True)
 
-# Basic stats based on last 30 days
-total_messages = len(df)
-unique_members = df['sender'].nunique()
+            # Basic stats
+            total_messages = len(df)
+            unique_members = df['sender'].nunique()
 
             # Member counts
             members = compute_member_counts(df)
@@ -205,14 +181,13 @@ unique_members = df['sender'].nunique()
             df['sector'] = df['message'].apply(detect_sector)
             sector_counts = df['sector'].value_counts().to_dict()
 
-            # Activity score (simple)
-            recent_df = df[df['timestamp'] >= (df['timestamp'].max() - pd.Timedelta(days=30))]
-            act_score = activity_score(recent_df)
+            # Activity score
+            act_score = activity_score(df)
 
             # Top contributors
             top_contrib = members.head(10).values.tolist()
 
-            # AI Summary (simple rule-based)
+            # AI Summary
             negative_pct = (df['sentiment_cat']=='negative').mean()
             if act_score < 0.2:
                 health = "Low"
@@ -283,7 +258,7 @@ unique_members = df['sender'].nunique()
             with open(poster_path, "rb") as f:
                 st.download_button("Download Weekly Poster (PNG)", data=f, file_name="funngro_weekly_poster.png", mime="image/png")
 
-            # Save parsed CSV to allow downloads
+            # Save parsed CSV
             csv_bytes = df.to_csv(index=False).encode('utf-8')
             st.download_button("Download parsed messages CSV", data=csv_bytes, file_name="funngro_parsed_messages.csv", mime="text/csv")
 else:
