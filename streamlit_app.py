@@ -1,4 +1,3 @@
-
 # streamlit_app.py
 import re
 import io
@@ -79,22 +78,23 @@ def sentiment_analysis(df):
     df['sentiment_cat'] = df['sentiment_score'].apply(lambda s: 'positive' if s>0.05 else ('negative' if s<-0.05 else 'neutral'))
     return df
 
+# ---------- Sector mapping (updated) ----------
 SECTORS = {
-    "design": ["design","logo","poster","canva","figma","photoshop","banner"],
-    "projects": ["project","deadline","task","submit","progress","work","report"],
-    "motivation": ["motivate","motivation","motivated","encourage","inspire","energize"],
-    "queries": ["question","how","help","doubt","query","can anyone","please help"],
-    "education": ["exam","study","syllabus","homework","class","school","tuition"],
-    "logistics": ["time","place","when","where","meeting","schedule","join"]
+    "Projects Pushed": ["project","deadline","task","submit","progress","work","report"],
+    "Queries": ["question","how","help","doubt","query","can anyone","please help"],
+    "Meeting Link Updates": ["link","meeting","schedule","join","time","place"],
+    "Other": []
 }
 
 def detect_sector(text):
     t = text.lower()
     for sector, kws in SECTORS.items():
+        if sector == "Other":
+            continue
         for kw in kws:
             if kw in t:
                 return sector
-    return "other"
+    return "Other"
 
 def activity_score(df):
     if df.empty: return 0.0
@@ -113,6 +113,7 @@ def generate_weekly_poster(summary, filename):
     neon_pink = (255,59,129)
     im = Image.new("RGB", (W, H), color=bg)
     draw = ImageDraw.Draw(im)
+
     try:
         font_title = ImageFont.truetype("DejaVuSans-Bold.ttf", 48)
         font_sub = ImageFont.truetype("DejaVuSans.ttf", 28)
@@ -121,22 +122,27 @@ def generate_weekly_poster(summary, filename):
         font_title = ImageFont.load_default()
         font_sub = ImageFont.load_default()
         font_small = ImageFont.load_default()
+
     draw.text((40,30), f"{summary.get('clan_name','Funngro Clan')}", font=font_title, fill=neon_cyan)
     draw.text((40,90), f"Weekly Summary", font=font_sub, fill=neon_green)
+
     x0 = 40; y0 = 150
     draw.rectangle([x0,y0, W-40, y0+200], outline=neon_pink, width=3)
     draw.text((x0+20, y0+20), f"Total messages: {summary.get('total_messages',0)}", font=font_sub, fill="white")
     draw.text((x0+20, y0+60), f"Unique members: {summary.get('unique_members',0)}", font=font_sub, fill="white")
     draw.text((x0+20, y0+100), f"Avg sentiment: {summary.get('avg_sentiment',0):.3f}", font=font_sub, fill="white")
     draw.text((x0+20, y0+140), f"Activity score: {summary.get('activity_score',0):.2f}", font=font_sub, fill="white")
+
     tc_x = 700; tc_y = 160
     draw.text((tc_x, tc_y-30), "Top Contributors", font=font_sub, fill=neon_green)
     top = summary.get('top_contributors',[])
     for i, (name, cnt) in enumerate(top[:5]):
         draw.text((tc_x, tc_y + i*30), f"{i+1}. {name} — {cnt} msgs", font=font_small, fill="white")
+
     suggestion = summary.get('suggestion','Keep the group active — try a 30-min sprint tomorrow!')
     draw.text((40, 380), "AI Suggestion:", font=font_sub, fill=neon_pink)
     draw.text((40, 420), suggestion, font=font_small, fill="white")
+
     im.save(filename)
     return filename
 
@@ -162,15 +168,13 @@ if uploaded is not None:
             df['message'] = df['message'].astype(str)
             df['sender'] = df['sender'].astype(str)
 
-            # ------------------- Filter last 30 days -------------------
+            # ----------- Filter last 30 days -----------
             last_30_days = datetime.now() - pd.Timedelta(days=30)
             df = df[df['timestamp'] >= last_30_days].reset_index(drop=True)
 
             # Basic stats
             total_messages = len(df)
             unique_members = df['sender'].nunique()
-
-            # Member counts
             members = compute_member_counts(df)
 
             # Sentiment
@@ -198,8 +202,8 @@ if uploaded is not None:
 
             if negative_pct > 0.2:
                 suggestion = "Many messages show negative tone. Consider a check-in or encouragement post."
-            elif sector_counts.get('design',0) > 10:
-                suggestion = "Lots of design requests — schedule a small design workshop or ask for volunteers."
+            elif sector_counts.get('Projects Pushed',0) > 10:
+                suggestion = "Lots of project updates — encourage collaboration or micro-checkpoints."
             else:
                 suggestion = "Great! Keep up regular check-ins and micro-challenges to keep engagement high."
 
@@ -258,7 +262,7 @@ if uploaded is not None:
             with open(poster_path, "rb") as f:
                 st.download_button("Download Weekly Poster (PNG)", data=f, file_name="funngro_weekly_poster.png", mime="image/png")
 
-            # Save parsed CSV
+            # Save parsed CSV to allow downloads
             csv_bytes = df.to_csv(index=False).encode('utf-8')
             st.download_button("Download parsed messages CSV", data=csv_bytes, file_name="funngro_parsed_messages.csv", mime="text/csv")
 else:
